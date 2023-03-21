@@ -22,6 +22,9 @@
 #include <sys/ioctl.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
+#include <sys/capsicum.h>
+#endif
 
 #include <net/if.h>
 
@@ -130,6 +133,9 @@ sync_init(const char *iface, const char *baddr, u_short port)
 	char ifnam[IFNAMSIZ], *ttlstr;
 	const char *errstr;
 	struct in_addr ina;
+#ifdef __FreeBSD__
+	cap_rights_t rights;
+#endif
 
 	if (iface != NULL)
 		sendmcast++;
@@ -224,6 +230,15 @@ sync_init(const char *iface, const char *baddr, u_short port)
 		    IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
 		goto fail;
 	}
+
+#ifdef __FreeBSD__
+	/* We set syncfd rights here to avoid dealing with CAP_IOCTL. */
+	cap_rights_init(&rights, CAP_PREAD, CAP_WRITE, CAP_EVENT);
+	if (cap_rights_limit(syncfd, &rights) < 0) {
+		log_warn("failed to cap_rights_limit syncfd");
+		goto fail;
+	}
+#endif
 
 	if (sync_debug)
 		log_debug("using multicast dhcp sync %smode "
@@ -376,6 +391,7 @@ sync_send(struct iovec *iov, int iovlen)
 			log_info("sending multicast sync message\n");
 		msg.msg_name = &sync_out;
 		msg.msg_namelen = sizeof(sync_out);
+		// TODO[1]: Fails in capability mode on FreeBSD.
 		if (sendmsg(syncfd, &msg, 0) == -1)
 			log_warn("sending multicast sync message failed");
 	}

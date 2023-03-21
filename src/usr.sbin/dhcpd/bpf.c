@@ -43,6 +43,9 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
+#include <sys/capsicum.h>
+#endif
 
 #include <arpa/inet.h>
 
@@ -182,6 +185,9 @@ if_register_receive(struct interface_info *info)
 #ifdef __OpenBSD__
 	int fildrop = BPF_FILDROP_CAPTURE;
 #endif
+#ifdef __FreeBSD__
+	cap_rights_t rights;
+#endif
 
 	/* Open a BPF device and hang it on this interface... */
 	info->rfdesc = if_register_bpf(info);
@@ -239,6 +245,17 @@ if_register_receive(struct interface_info *info)
 	/* make sure these settings cannot be changed after dropping privs */
 	if (ioctl(info->rfdesc, BIOCLOCK) == -1)
 		fatal("Failed to lock bpf descriptor");
+
+#ifdef __FreeBSD__
+	/*
+	 * Set bpf rights here to sidestep allowing IOCTLs.
+	 * All info->rfdesc ioctl operations occur prior to
+	 * this line.
+	 */
+	cap_rights_init(&rights, CAP_PREAD, CAP_PWRITE, CAP_EVENT);
+	if (cap_rights_limit(info->rfdesc, &rights) < 0)
+		fatal("Can't cap_rights_limit bpf device");
+#endif
 }
 
 ssize_t

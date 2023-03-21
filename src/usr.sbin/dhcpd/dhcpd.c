@@ -41,6 +41,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
+#include <sys/capsicum.h>
+#endif
 
 #include <net/if.h>
 
@@ -271,6 +274,12 @@ main(int argc, char *argv[])
 		if (pledge("stdio inet sendfd", NULL) == -1)
 			err(1, "pledge");
 	}
+#endif
+
+#ifdef __FreeBSD__
+	/* Enter capability mode for main process ("man 2 cap_enter"). */
+	if (cap_enter())
+		err(1, "cap_enter failed");
 #endif
 
 	add_timeout(cur_time + 5, periodic_scan, NULL);
