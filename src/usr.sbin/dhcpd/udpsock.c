@@ -19,6 +19,9 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
+#include <sys/capsicum.h>
+#endif
 
 #include <arpa/inet.h>
 
@@ -53,6 +56,9 @@ udpsock_startup(struct in_addr bindaddr)
 	int			 sock, onoff;
 	struct sockaddr_in	 sin4;
 	struct udpsock		*udpsock;
+#ifdef __FreeBSD__
+	cap_rights_t		rights;
+#endif
 
 	if ((udpsock = calloc(1, sizeof(struct udpsock))) == NULL)
 		fatal("could not create udpsock");
@@ -75,6 +81,12 @@ udpsock_startup(struct in_addr bindaddr)
 		fatal("bind failed for udp");
 
 	add_protocol("udp", sock, udpsock_handler, (void *)(intptr_t)udpsock);
+#ifdef __FreeBSD__
+	/* Set udp socket rights here to sidestep allowing IOCTLs. */
+	cap_rights_init(&rights, CAP_READ, CAP_WRITE, CAP_CONNECT);
+	if (cap_rights_limit(sock, &rights) < 0)
+		fatal("failed to cap_rights_limit on udp socket");
+#endif
 	log_info("Listening on %s:%d/udp.", inet_ntoa(sin4.sin_addr),
 	    ntohs(server_port));
 
@@ -137,6 +149,23 @@ udpsock_handler(struct protocol *protocol)
 	}
 	if_indextoname(sdl->sdl_index, ifname);
 
+	/*
+	 * TODO[2]: For FreeBSD, Capsicum appears to allow unconnected,
+	 * ephemeral socket fds to be created and iotctl'd. The manual
+	 * pages do not appear to mention this behavior ("man 4 rights"
+	 * comes close).
+	 *
+	 * getifaddrs(3) can also be used to learn an iface's addrs without
+	 * a fd created by socket(2). [1] However, capability mode does not
+	 * allow getifaddrs(3) because it uses a sysctl. Since sysctls are
+	 * stored in a global namespace, Capsicum disallows access to them.
+	 *
+	 * According to kernel commit rG274579831b61, this type of behavior
+	 * may be removed in capability mode. [2]
+	 *
+	 * 1. https://reviews.freebsd.org/D26538#591081
+	 * 2. https://reviews.freebsd.org/D29423
+	 */
 	if ((sockio = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
 		log_warn("socket creation failed");
 		return;

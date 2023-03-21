@@ -40,6 +40,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
+#include <sys/capsicum.h>
+#endif
 
 #include <arpa/inet.h>
 
@@ -68,6 +71,9 @@ icmp_startup(int routep, void (*handler)(struct iaddr, u_int8_t *, int))
 {
 	struct protoent *proto;
 	int protocol = 1, state;
+#ifdef __FreeBSD__
+	cap_rights_t rights;
+#endif
 
 	/* Only initialize icmp once. */
 	if (icmp_protocol_initialized)
@@ -88,6 +94,12 @@ icmp_startup(int routep, void (*handler)(struct iaddr, u_int8_t *, int))
 	    &state, sizeof(state)) == -1)
 		fatal("Unable to disable SO_DONTROUTE on ICMP socket");
 
+#ifdef __FreeBSD__
+	/* Set icmp rights here to avoid setsockopt. */
+	cap_rights_init(&rights, CAP_READ, CAP_WRITE, CAP_CONNECT, CAP_EVENT);
+	if (cap_rights_limit(icmp_protocol_fd, &rights) < 0)
+		fatal("unable to cap_rights_limit icmp fd");
+#endif
 	add_protocol("icmp", icmp_protocol_fd, icmp_echoreply,
 	    (void *)handler);
 }

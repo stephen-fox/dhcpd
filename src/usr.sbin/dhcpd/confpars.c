@@ -40,6 +40,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
+#include <sys/capsicum.h>
+#endif
 
 #include <net/if.h>
 
@@ -74,6 +77,9 @@ readconf(void)
 	char *val;
 	int token;
 	int declaration = 0;
+#ifdef __FreeBSD__
+	cap_rights_t rights;
+#endif
 
 	new_parse(path_dhcpd_conf);
 
@@ -93,6 +99,11 @@ readconf(void)
 	if ((cfile = fopen(path_dhcpd_conf, "r")) == NULL)
 		fatal("Can't open %s", path_dhcpd_conf);
 
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_PREAD);
+	if (cap_rights_limit(fileno(cfile), &rights) < 0)
+		fatal("Failed to cap_rights_limit config file fd");
+#endif
 	do {
 		token = peek_token(&val, cfile);
 		if (token == EOF)
@@ -120,6 +131,9 @@ read_leases(void)
 	FILE *cfile;
 	char *val;
 	int token;
+#ifdef __FreeBSD__
+	cap_rights_t rights;
+#endif
 
 	new_parse(path_dhcpd_db);
 
@@ -140,6 +154,12 @@ read_leases(void)
 		log_warnx("Please read the dhcpd.leases manual page if you");
 		fatalx("don't know what to do about this.");
 	}
+
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_PREAD);
+	if (cap_rights_limit(fileno(cfile), &rights) < 0)
+		fatal("failed to cap_rights_limit lease file");
+#endif
 
 	do {
 		token = next_token(&val, cfile);

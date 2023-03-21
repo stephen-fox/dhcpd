@@ -20,6 +20,9 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
+#include <sys/capsicum.h>
+#endif
 
 #include <netinet/in.h>
 #include <net/if.h>
@@ -53,10 +56,24 @@ pftable_handler()
 	struct pf_cmd cmd;
 	struct pollfd pfd[1];
 	int l, r, fd, nfds;
+#ifdef __FreeBSD__
+	cap_rights_t rights;
+	unsigned long ioctl_limits[] = {
+		DIOCRADDADDRS,  /* from: pf_change_table */
+		DIOCRDELADDRS,  /* from: pf_change_table */
+		DIOCKILLSTATES, /* from: pf_kill_state   */
+	};
+	int num_ioctls = sizeof(ioctl_limits) / sizeof(ioctl_limits[0]);
+#endif
 
 	if ((fd = open(_PATH_DEV_PF, O_RDWR|O_NOFOLLOW)) == -1)
 		fatal("can't open pf device");
-#ifndef __OpenBSD__
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_PREAD, CAP_PWRITE, CAP_IOCTL);
+	if (cap_rights_limit(fd, &rights) < 0)
+		fatal("failed to cap_rights_limit pf device");
+	if (cap_ioctls_limit(fd, ioctl_limits, num_ioctls) < 0)
+		fatal("failed to cap_ioctls_limit pf device");
 	if (chroot("/var/empty") == -1)
 		fatal("chroot /var/empty");
 	if (chdir("/") == -1)
@@ -73,6 +90,14 @@ pftable_handler()
 		fatal("unveil /");
 	if (unveil(NULL, NULL) == -1)
 		fatal("unveil");
+#else
+	/*
+	 * Enter capability mode for pftable_handler proc ("man 2 cap_enter").
+	 * Note: This needs to happen after dropping privileges because the
+	 * above set* system calls are not allowed in capability mode.
+	 */
+	if (cap_enter())
+	       fatal("pftable_handler cap_enter failed");
 #endif
 
 	setproctitle("pf table handler");
