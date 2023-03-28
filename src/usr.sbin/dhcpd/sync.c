@@ -201,7 +201,7 @@ sync_init(const char *iface, const char *baddr, u_short port)
 
 	cap_close(capcas);
 
-	if (cap_bind(capnet, syncfd, (struct sockaddr *)&sync_out, sizeof(sync_out)) == -1)
+	if (cap_connect(capnet, syncfd, (struct sockaddr *)&sync_out, sizeof(sync_out)) == -1)
 		goto fail;
 
 	strlcpy(ifnam, iface, sizeof(ifnam));
