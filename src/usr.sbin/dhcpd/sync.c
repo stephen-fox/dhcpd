@@ -24,6 +24,8 @@
 #include <sys/socket.h>
 #ifdef __FreeBSD__
 #include <sys/capsicum.h>
+#include <libcasper.h>
+#include <casper/cap_net.h>
 #endif
 
 #include <net/if.h>
@@ -135,6 +137,7 @@ sync_init(const char *iface, const char *baddr, u_short port)
 	struct in_addr ina;
 #ifdef __FreeBSD__
 	cap_rights_t rights;
+	cap_channel_t *capcas, *capnet;
 #endif
 
 	if (iface != NULL)
@@ -181,12 +184,25 @@ sync_init(const char *iface, const char *baddr, u_short port)
 	else
 		sync_out.sin_port = htons(port);
 
-	if (bind(syncfd, (struct sockaddr *)&sync_out, sizeof(sync_out)) == -1)
-		goto fail;
-
 	/* Don't use multicast messages */
-	if (iface == NULL)
-		return (syncfd);
+	if (iface == NULL) {
+	  if (bind(syncfd, (struct sockaddr *)&sync_out, sizeof(sync_out)) == -1)
+		goto fail;
+	  return (syncfd);
+	}
+
+	capcas = cap_init();
+	if (capcas == NULL)
+		 goto fail;
+
+	capnet = cap_service_open(capcas, "system.net");
+	if (capnet == NULL)
+		 goto fail;
+
+	cap_close(capcas);
+
+	if (cap_bind(capnet, syncfd, (struct sockaddr *)&sync_out, sizeof(sync_out)) == -1)
+		goto fail;
 
 	strlcpy(ifnam, iface, sizeof(ifnam));
 	ttl = DHCP_SYNC_MCASTTTL;
@@ -231,7 +247,7 @@ sync_init(const char *iface, const char *baddr, u_short port)
 		goto fail;
 	}
 
-#ifdef __FreeBSD__
+#ifdef __TODO_DISABLED_FreeBSD__
 	/* We set syncfd rights here to avoid dealing with CAP_IOCTL. */
 	cap_rights_init(&rights, CAP_PREAD, CAP_WRITE, CAP_EVENT);
 	if (cap_rights_limit(syncfd, &rights) < 0) {

@@ -9,7 +9,7 @@ SRCS=	bootp.c confpars.c db.c dhcp.c dhcpd.c bpf.c packet.c log.c \
 PROG=	dhcpd
 MAN=	dhcpd.8 dhcpd.conf.5 dhcpd.leases.5 dhcp-options.5
 
-LDADD+=-lcrypto -lmd
+LDADD+=-lcrypto -lmd -lcasper -lcap_net
 CFLAGS+=-Wall -D__dead=''
 
 .include <bsd.prog.mk>
