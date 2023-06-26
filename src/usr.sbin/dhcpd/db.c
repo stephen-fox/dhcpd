@@ -193,6 +193,10 @@ commit_leases(void)
 	return (1);
 }
 
+/*
+ * Open the lease database file descriptors. One fd for reading the
+ * initial leases, and the second for writing newly-issued leases.
+ */
 void
 db_startup(void)
 {
@@ -214,6 +218,15 @@ db_startup(void)
 		fatal("Can't cap_rights_limit on db fd");
 #endif
 
+	open_leases();
+}
+
+/*
+ * Parse the existing leases from the lease database file.
+ */
+void
+db_parse(void)
+{
 	/* Read in the existing lease file... */
 	read_leases();
 	time(&write_time);

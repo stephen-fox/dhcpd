@@ -350,6 +350,7 @@ int	peek_token(char **, FILE *);
 
 /* confpars.c */
 int	 readconf(void);
+void	 open_leases(void);
 void	 read_leases(void);
 int	 parse_statement(FILE *, struct group *, int, struct host_decl *, int);
 void	 parse_allow_deny(FILE *, struct group *, int);
@@ -496,6 +497,7 @@ char *piaddr(struct iaddr);
 int write_lease(struct lease *);
 int commit_leases(void);
 void db_startup(void);
+void db_parse(void);
 void new_lease_file(void);
 
 /* packet.c */
